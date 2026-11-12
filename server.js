@@ -15,13 +15,13 @@ const EVENTOS_CEFA = [
     { nombre: "Meeting Sr. Roca", txt: "El que vaya a mear bebe 5" },
     { nombre: "2x1 Mercadona", txt: "Se doblan los tragos de la fila" },
     { nombre: "El innombrable", txt: "Prohibido decir nombres (Falla=3)" },
-    { nombre: "Codos de cristal", txt: "Prohibido apoyar codos (Falla=3)" },
-    { nombre: "Brindis chungo", txt: "Último en brindar bebe vaso central" },
-    { nombre: "Bumerán tóxico", txt: "Tus mandados te vuelven x2" },
+    { nombre: "Ley del Buffalo", txt: "Si sujetas el vaso con tu mano dominante, bebes 2" },
+    { nombre: "Torre de Babel", txt: "Habla obligatoriamente con un acento que no uses (Falla = 2 tragos)" },
+    { nombre: "La Fiesta del Gnomo", txt: "Haz el gesto de sacar un gnomo del vaso al beber o +1 trago" },
     { nombre: "Saludo calamar", txt: "Saludo militar al beber/mandar" },
     { nombre: "A los tiburones", txt: "Los 2 con menos cartas beben 4" },
-    { nombre: "Borrachera simétrica", txt: "Tu rival de enfrente te copia todo" },
-    { nombre: "Apuesta de barra", txt: "El que más falle la ciega bebe 4" },
+    { nombre: "El Juicio de las Manos", txt: "Al beber, levanta la mano izquierda y di '¡Por Cefa!' (Falla = 1 trago)" },
+    { nombre: "A jugar de pie", txt: "Toda esta ronda se juega de pie obligatoriamente" },
     { nombre: "Toque de queda", txt: "Prohibido decir 'beber/tragos'" }
 ];
 
@@ -51,7 +51,8 @@ io.on('connection', (socket) => {
             rooms[roomId] = {
                 id: roomId, host: name, players: [], deck: [], pyramid: [], events: [],
                 state: 'lobby', turnIdx: 0, phase: 1, pyramidRows: 4, activeEvent: null,
-                currentRow: 3, currentCol: 0, pendingSends: 0, isPaused: false, activeVote: null, duels: {}
+                currentRow: 3, currentCol: 0, pendingSends: 0, isPaused: false, activeVote: null, duels: {},
+                waitingForNext: null, auction: { active: false, card: null, highestBid: 0, highestBidder: null, timeLeft: 10 }
             };
         }
         let room = rooms[roomId];
@@ -75,9 +76,9 @@ io.on('connection', (socket) => {
                 p.hand.forEach(c => { c.revealed = false; c.isHighlighted = false; });
                 p.hidalgos = 0; p.totalTragos = 0;
             });
-            room.state = 'phase1'; room.turnIdx = 0; room.phase = 1; room.activeEvent = null;
+            room.state = 'phase1'; room.turnIdx = 0; room.phase = 1; room.activeEvent = null; room.waitingForNext = null;
             io.to(roomId).emit('updateState', room);
-            io.to(roomId).emit('cefa_message', `¡Empezamos! Turno de ${room.players[0].name}.`);
+            io.to(roomId).emit('cefa_message', `¡Empezamos! Ronda ${room.phase}. Turno de ${room.players[0].name}.`);
         }
     });
 
@@ -113,6 +114,14 @@ io.on('connection', (socket) => {
             io.to(p.socketId).emit('showDrinkPenalty', { tragos, card: targetCard });
         }
     });
+
+    socket.on('resolveTurn', ({roomId, playerName}) => {
+        let room = rooms[roomId];
+        if (room) {
+            room.waitingForNext = playerName;
+            io.to(roomId).emit('updateState', room);
+        }
+    });
     
     socket.on('addTragos', ({ roomId, playerName, tragos }) => {
         let room = rooms[roomId];
@@ -121,47 +130,44 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('updateState', room);
     });
 
-    // Let it Ride Roulette Logic
     socket.on('letItRide', ({ roomId, playerName, colorElegido, tragosOriginales }) => {
         let room = rooms[roomId];
-        io.to(roomId).emit('cefa_message', `¡${playerName} se la juega en la Ruleta Let It Ride!`);
-        io.to(roomId).emit('spinRoulette', { playerName });
+        const rand = Math.random();
+        let resultColor = 'Verde';
+        if (rand < 0.475) resultColor = 'Rojo';
+        else if (rand < 0.95) resultColor = 'Negro';
+
+        let victoria = (colorElegido === resultColor);
+        let p = room.players.find(x => x.name === playerName);
+
+        io.to(roomId).emit('cefa_message', `¡${playerName} se la juega en la Ruleta Casino!`);
+        io.to(roomId).emit('spinRoulette', { playerName, colorElegido, resultColor });
+        
+        let finalTragos = victoria ? (resultColor === 'Verde' ? tragosOriginales * 3 : 0) : tragosOriginales * 2;
+        
+        if (!victoria) { if(p) p.totalTragos += finalTragos; }
         
         setTimeout(() => {
-            const rand = Math.random();
-            let resultColor = 'Verde';
-            if (rand < 0.475) resultColor = 'Rojo';
-            else if (rand < 0.95) resultColor = 'Negro';
-
-            let victoria = (colorElegido === resultColor);
-            let p = room.players.find(x => x.name === playerName);
-
-            if (victoria) {
-                if (resultColor === 'Verde') {
-                    io.to(roomId).emit('cefa_message', `¡VERDE! ${playerName} se salva y manda el triple (${tragosOriginales * 3}).`);
-                    io.to(p.socketId).emit('showSendDrinks', { tragos: tragosOriginales * 3 });
-                } else {
-                    io.to(roomId).emit('cefa_message', `¡Salió ${resultColor}! ${playerName} acertó y se libra de los tragos.`);
-                    io.to(roomId).emit('ruletaFin');
-                }
-            } else {
-                let finalTragos = tragosOriginales * 2;
-                if(p) p.totalTragos += finalTragos;
-                io.to(roomId).emit('cefa_message', `¡Salió ${resultColor}! ${playerName} falló miserablemente. ¡Bebe ${finalTragos} tragos!`);
-                io.to(roomId).emit('ruletaFin');
+            if (victoria && resultColor === 'Verde') {
+                io.to(p.socketId).emit('showSendDrinks', { tragos: finalTragos });
             }
+            io.to(roomId).emit('ruletaFin', { victoria, resultColor, tragos: finalTragos, playerName });
+            room.waitingForNext = playerName;
             io.to(roomId).emit('updateState', room);
-        }, 3000);
+        }, 4500);
     });
 
     socket.on('advancePhase1', (roomId) => {
         let room = rooms[roomId];
-        room.phase++;
-        if (room.phase > 4) { room.phase = 1; room.turnIdx++; }
-        if (room.turnIdx >= room.players.length) startPyramid(room);
+        room.turnIdx++;
+        if (room.turnIdx >= room.players.length) {
+            room.turnIdx = 0; room.phase++;
+        }
+        room.waitingForNext = null;
+        if (room.phase > 4) { startPyramid(room); }
         else {
             io.to(roomId).emit('updateState', room);
-            io.to(roomId).emit('cefa_message', `Turno de ${room.players[room.turnIdx].name}.`);
+            io.to(roomId).emit('cefa_message', `Ronda ${room.phase}. Turno de ${room.players[room.turnIdx].name}.`);
         }
     });
 
@@ -192,7 +198,8 @@ io.on('connection', (socket) => {
 
     socket.on('revealNextPyramid', (roomId) => {
         let room = rooms[roomId];
-        if (room.pendingSends > 0 || room.currentRow < 0) return;
+        if (room.currentRow < 0) return;
+        if (room.pendingSends > 0 || room.auction.active) return;
 
         let card = room.pyramid[room.currentRow][room.currentCol];
         card.revealed = true;
@@ -240,15 +247,71 @@ io.on('connection', (socket) => {
             room.events[room.currentRow].revealed = true; 
             let ev = room.events[room.currentRow];
             room.activeEvent = ev;
+            
+            ensureDeck(room, 1);
+            let auctionCard = room.deck.pop();
+            auctionCard.revealed = true;
+            room.auction = { active: false, card: auctionCard, highestBid: 0, highestBidder: null, timeLeft: 10 };
+
             io.to(room.id).emit('updateState', room);
             io.to(room.id).emit('playAlarm');
             setTimeout(() => {
-                io.to(room.id).emit('cefa_message', `¡Evento Activo: ${ev.nombre}!`);
-                io.to(room.id).emit('showEvent', ev);
-                room.currentRow--; room.currentCol = 0;
+                io.to(room.id).emit('showMandatoryEvent', ev);
             }, 800);
+        } else {
+            io.to(room.id).emit('updateState', room);
         }
     }
+
+    socket.on('startAuctionTimer', (roomId) => {
+        let room = rooms[roomId];
+        if(!room || !room.auction) return;
+        
+        io.to(roomId).emit('startAuction', room.auction);
+        room.auction.active = true;
+        room.auction.timeLeft = 10;
+        
+        let timer = setInterval(() => {
+            if(!room.auction || !room.auction.active) { clearInterval(timer); return; }
+            room.auction.timeLeft--;
+            io.to(roomId).emit('auctionTick', room.auction.timeLeft);
+            
+            if(room.auction.timeLeft <= 0) {
+                clearInterval(timer);
+                room.auction.active = false;
+                let winner = room.auction.highestBidder;
+                let bid = room.auction.highestBid;
+                if(winner) {
+                    let w = room.players.find(p=>p.name===winner);
+                    if(w) { w.totalTragos += bid; w.hand.push(room.auction.card); }
+                    io.to(roomId).emit('cefa_message', `¡Subasta ganada por ${winner} con ${bid} tragos!`);
+                } else {
+                    io.to(roomId).emit('cefa_message', `Nadie pujó. La carta se pierde en el olvido.`);
+                }
+                io.to(roomId).emit('auctionEnd', { winner, bid, card: room.auction.card });
+                
+                room.currentRow--; room.currentCol = 0;
+                if (room.currentRow < 0) {
+                    setTimeout(() => {
+                        io.to(roomId).emit('cefa_message', '¡PIRÁMIDE COMPLETADA! Que los dioses se apiaden de vosotros.');
+                    }, 6000);
+                }
+                setTimeout(() => io.to(roomId).emit('updateState', room), 5500);
+            }
+        }, 1000);
+    });
+
+    socket.on('placeBid', ({roomId, playerName, bid}) => {
+        let room = rooms[roomId];
+        if(!room || !room.auction || !room.auction.active) return;
+        if(bid > room.auction.highestBid) {
+            room.auction.highestBid = bid;
+            room.auction.highestBidder = playerName;
+            room.auction.timeLeft = 10;
+            io.to(roomId).emit('cefa_message', `¡${playerName} sube la puja a ${bid} tragos!`);
+            io.to(roomId).emit('auctionUpdate', { highestBid: bid, highestBidder: playerName });
+        }
+    });
 
     socket.on('reglaHidalgo', ({ roomId, playerName }) => {
         let room = rooms[roomId];
@@ -263,7 +326,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Control Host
     socket.on('togglePause', (roomId) => {
         let room = rooms[roomId];
         room.isPaused = !room.isPaused;
@@ -271,7 +333,6 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('updateState', room);
     });
 
-    // Voto Popular
     socket.on('iniciarJuicio', ({roomId, targetName}) => {
         let room = rooms[roomId];
         room.activeVote = { target: targetName, culpable: 0, inocente: 0, voters: [] };
@@ -301,7 +362,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Duelos PvP
     socket.on('challengeDuel', ({roomId, fromName, targetName}) => {
         let room = rooms[roomId];
         let duelId = Math.random().toString(36).substr(2, 5);
@@ -336,7 +396,12 @@ io.on('connection', (socket) => {
                 room.players.find(x => x.name === duel.p2).totalTragos++;
             }
             io.to(roomId).emit('cefa_message', `Duelo: ${resMsg}`);
-            io.to(roomId).emit('closeDuelUI');
+            
+            io.to(roomId).emit('duelResult', {
+                p1: duel.p1, p1Choice: duel.p1Choice,
+                p2: duel.p2, p2Choice: duel.p2Choice,
+                loser: loser, resMsg: resMsg
+            });
             delete room.duels[duelId];
             io.to(roomId).emit('updateState', room);
         }
