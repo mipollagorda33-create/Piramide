@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>La Pirámide de Cefa - Ultimate</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&family=Nunito:wght@400;700&display=swap');
+        :root { --bg-dark: #0f172a; --panel-bg: #1e293b; --primary: #ef4444; --primary-hover: #dc2626; --accent: #3b82f6; --text-main: #f8fafc; --glow: 0 0 15px 5px rgba(239, 68, 68, 0.6); --font-game: 'Fredoka', sans-serif; --font-ui: 'Nunito', sans-serif; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: var(--font-ui); }
+        body { background-color: var(--bg-dark); color: var(--text-main); min-height: 100vh; display: flex; flex-direction: column; overflow-x: hidden; padding-top: 40px; }
+        h1, h2, h3 { font-family: var(--font-game); }
+        
+        #event-banner { position: fixed; top: 0; left: 0; width: 100%; background: linear-gradient(90deg, #8b5cf6, #4c1d95); color: white; text-align: center; padding: 8px; font-weight: bold; font-family: var(--font-game); z-index: 100; box-shadow: 0 4px 10px rgba(0,0,0,0.5); display: none; }
+        
+        #host-controls { background: rgba(255,215,0,0.2); border: 2px solid gold; border-radius: 8px; padding: 10px; margin: 10px auto; text-align: center; max-width: 600px; display: none; }
+        .host-badge { color: gold; font-weight: bold; font-family: var(--font-game); }
+        
+        #cefa-container { position: fixed; top: 50px; right: 10px; display: flex; align-items: flex-start; gap: 10px; z-index: 50; pointer-events: none; }
+        #cefa-avatar { width: 70px; height: 70px; background: url('cefa.jpg') center/cover; border: 3px solid #fff; border-radius: 50%; box-shadow: 0 5px 15px rgba(0,0,0,0.5); animation: float 3s ease-in-out infinite; }
+        #cefa-bubble { background: white; color: #0f172a; padding: 10px; border-radius: 12px; border-top-right-radius: 2px; font-weight: bold; max-width: 180px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); font-family: var(--font-game); transform: scale(0); transform-origin: top right; transition: transform 0.3s; }
+        #cefa-bubble.show { transform: scale(1); }
+        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+        
+        .screen { display: none; padding: 15px; width: 100%; max-width: 1000px; margin: 0 auto; flex-grow: 1; }
+        .screen.active { display: flex; flex-direction: column; }
+        .panel { background: var(--panel-bg); border-radius: 16px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); margin: 0 auto; width: 100%; max-width: 600px; text-align: center; }
+        
+        .card-container { width: 50px; height: 75px; perspective: 1000px; position: relative; transition: transform 0.3s, box-shadow 0.3s; margin: 2px; }
+        .card-container.highlight { box-shadow: var(--glow); border-radius: 8px; animation: pulse-glow 1.5s infinite alternate; cursor: pointer; z-index: 10; }
+        .card-container.highlight:hover { transform: scale(1.1) translateY(-10px); }
+        @keyframes pulse-glow { from { box-shadow: 0 0 10px 2px rgba(239, 68, 68, 0.5); } to { box-shadow: 0 0 20px 8px rgba(239, 68, 68, 0.9); } }
+        .card-inner { width: 100%; height: 100%; position: relative; transition: transform 0.6s; transform-style: preserve-3d; }
+        .card-container.flipped .card-inner { transform: rotateY(180deg); }
+        .card-front, .card-back { width: 100%; height: 100%; position: absolute; backface-visibility: hidden; border-radius: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: var(--font-game); }
+        .card-back { background: linear-gradient(135deg, var(--primary), #991b1b); color: white; border: 2px solid #fff; font-size: 18px; }
+        .card-front { background: white; color: black; transform: rotateY(180deg); border: 2px solid #e2e8f0; }
+        .val { font-size: 1rem; font-weight: bold; } .suit { font-size: 1.1rem; }
+        
+        .board-wrapper { display: flex; flex-direction: column; align-items: center; margin: 15px 0; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 16px; }
+        .pyramid-row { display: flex; gap: 8px; justify-content: center; margin-bottom: 5px; }
+        
+        .players-hands-container { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 15px; }
+        .player-hand { background: rgba(255,255,255,0.05); padding: 10px; border-radius: 12px; text-align: center; min-width: 140px; position: relative;}
+        .hand-cards { display: flex; gap: 4px; justify-content: center; margin-top: 5px; min-height: 80px; flex-wrap: wrap;}
+        .stats-badge { background: #334155; border-radius: 10px; font-size: 0.8rem; padding: 4px 8px; margin-top: 5px; display: inline-block; }
+        
+        button { background: var(--primary); color: white; border: none; padding: 12px 18px; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; margin: 5px; font-family: var(--font-game); }
+        button:active { transform: scale(0.95); }
+        button:disabled { background: #475569; opacity: 0.5; }
+        input, select { width: 100%; padding: 10px; background: rgba(0,0,0,0.2); border: 1px solid #334155; border-radius: 8px; color: white; margin-bottom: 10px; font-size: 1rem; }
+        
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); backdrop-filter: blur(5px); display: flex; align-items: center; justify-content: center; z-index: 200; opacity: 0; pointer-events: none; transition: 0.3s; }
+        .modal-overlay.active { opacity: 1; pointer-events: auto; }
+        .modal-content { background: var(--panel-bg); padding: 25px; border-radius: 16px; text-align: center; max-width: 350px; width: 90%; transform: scale(0.8); transition: 0.3s; border: 2px solid var(--primary); }
+        .modal-overlay.active .modal-content { transform: scale(1); }
+        .modal-title { font-size: 1.4rem; margin-bottom: 10px; color: var(--primary); font-family: var(--font-game); }
+        .modal-body { font-size: 1rem; margin-bottom: 20px; }
+        .btn-green { background: #10b981; } .btn-dark { background: #1e293b; border: 1px solid #fff; } .btn-red { background: #ef4444; } .btn-blue { background: var(--accent); }
+        
+        .roulette-box { width: 100px; height: 100px; border-radius: 50%; border: 5px solid #fff; margin: 15px auto; background: conic-gradient(#ef4444 0% 47.5%, #1e293b 47.5% 95%, #10b981 95% 100%); transition: transform 3s cubic-bezier(0.25, 0.1, 0.25, 1); }
+        .spin-anim { transform: rotate(1440deg); }
+    </style>
+</head>
+<body>
+    <div id="event-banner">EVENTO ACTIVO: Ninguno</div>
+    
+    <div id="cefa-container">
+        <div id="cefa-bubble">¡Preparad los hígados, pardillos!</div>
+        <div id="cefa-avatar"></div>
+    </div>
+    
+    <div id="host-controls">
+        <span class="host-badge">👑 PANEL HOST</span><br>
+        <button onclick="socket.emit('togglePause', currentRoomId)">⏸ Pausa / Duelos</button>
+        <button onclick="openVotoPopular()">⚖️ Voto Popular</button>
+    </div>
+
+    <!-- Modales Genéricos -->
+    <div id="game-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-title" id="modal-title"></div>
+            <div class="modal-body" id="modal-body"></div>
+            <div id="modal-actions"></div>
+        </div>
+    </div>
+    
+    <div id="roulette-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-title">¡Let It Ride!</div>
+            <div class="modal-body">
+                <p id="roulette-text">Alguien se la juega...</p>
+                <div class="roulette-box" id="roulette-wheel"></div>
+            </div>
+            <div id="roulette-actions"></div>
+        </div>
+    </div>
+
+    <!-- Pantallas -->
+    <div id="screen-lobby" class="screen active">
+        <div class="panel">
+            <h1>La Pirámide de Cefa</h1>
+            <input type="text" id="nickname" placeholder="Tu Apodo">
+            <input type="text" id="room-code" value="CEFA1" placeholder="Código Sala">
+            <button onclick="joinRoom()" style="width:100%">Entrar</button>
+            <div id="lobby-wait" style="display:none; margin-top:20px;">
+                <h3>Mesa:</h3>
+                <ul id="lobby-players" style="list-style:none; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px;"></ul>
+                <button id="btn-start" onclick="startGame()" style="width:100%; display:none; background:var(--accent)">👑 Iniciar Partida</button>
+                <p id="wait-msg" style="color:var(--text-muted)">Esperando al Host...</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="screen-adivinacion" class="screen">
+        <div class="panel">
+            <h2 id="adiv-player-title">Cargando...</h2>
+            <p id="adiv-instruction">...</p>
+            <div class="players-hands-container"><div class="hand-cards" id="adiv-cards-container"></div></div>
+            <div id="adiv-actions" style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;"></div>
+            <button id="btn-next-phase" class="btn-blue" style="display:none; width:100%; margin-top:15px;" onclick="socket.emit('advancePhase1', currentRoomId)">👑 Siguiente Turno</button>
+        </div>
+    </div>
+
+    <div id="screen-piramide" class="screen">
+        <div style="text-align:center; margin-bottom: 5px;">
+            <h2>La Pirámide</h2>
+            <button id="btn-next-pyramid" style="display:none;" onclick="socket.emit('revealNextPyramid', currentRoomId)">👑 Destapar Carta</button>
+        </div>
+        <div class="board-wrapper" id="pyramid-board"></div>
+        <h3 style="text-align:center;">Manos</h3>
+        <div class="players-hands-container" id="all-hands-container"></div>
+    </div>
+    
+    <!-- Pausa UI -->
+    <div id="screen-paused" class="screen">
+        <div class="panel">
+            <h1>JUEGO PAUSADO ⏸</h1>
+            <p>Aprovecha para ir al baño o retar a alguien.</p>
+            <h3 style="margin-top:20px;">⚔️ Retar a Piedra, Papel, Tijera</h3>
+            <div id="duel-list" style="margin-top:10px;"></div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        let myName = ''; let currentRoomId = ''; let gameState = null; let amIHost = false;
+
+        const SIMBOLOS = {'Oros': '🪙', 'Copas': '🏆', 'Espadas': '⚔️', 'Bastos': '🪵'};
+        const NOMBRES = {1: '1', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: 'Sota', 9: 'Caballo', 10: 'Rey'};
+        const PALOS = ['Oros', 'Copas', 'Espadas', 'Bastos'];
+
+        // Audio System
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playBeep(freq, type, dur) {
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+            let osc = audioCtx.createOscillator(); let gain = audioCtx.createGain();
+            osc.type = type; osc.frequency.value = freq;
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.start(); gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + dur);
+            osc.stop(audioCtx.currentTime + dur);
+        }
+        function playGlup() { playBeep(300, 'sine', 0.2); setTimeout(()=>playBeep(400, 'sine', 0.2), 150); }
+        function playDrum() { playBeep(100, 'sawtooth', 0.1); setTimeout(()=>playBeep(100, 'sawtooth', 0.1), 100); }
+        function playAlarm() { playBeep(800, 'square', 0.3); setTimeout(()=>playBeep(800, 'square', 0.3), 400); }
+        
+        socket.on('playGlup', playGlup); socket.on('playDrum', playDrum); socket.on('playAlarm', playAlarm);
+
+        function cefaHabla(texto) {
+            const bubble = document.getElementById('cefa-bubble');
+            bubble.innerText = texto; bubble.classList.add('show');
+            setTimeout(() => { bubble.classList.remove('show'); }, 4000);
+        }
+
+        function showModal(title, bodyHtml, buttonsHtml) {
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-body').innerHTML = bodyHtml;
+            document.getElementById('modal-actions').innerHTML = buttonsHtml;
+            document.getElementById('game-modal').classList.add('active');
+        }
+        function closeModal() { document.getElementById('game-modal').classList.remove('active'); }
+
+        socket.on('cefa_message', (msg) => { cefaHabla(msg); });
+
+        function joinRoom() {
+            myName = document.getElementById('nickname').value.trim();
+            currentRoomId = document.getElementById('room-code').value.trim();
+            if(!myName || !currentRoomId) return alert('Rellena los datos');
+            socket.emit('joinRoom', { name: myName, roomId: currentRoomId });
+            document.querySelector('#screen-lobby input').style.display = 'none';
+            document.querySelectorAll('#screen-lobby input')[1].style.display = 'none';
+            document.querySelector('#screen-lobby button').style.display = 'none';
+            document.getElementById('lobby-wait').style.display = 'block';
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        function startGame() { socket.emit('startGame', currentRoomId); }
+
+        socket.on('updateState', (room) => {
+            gameState = room;
+            amIHost = (room.host === myName);
+            document.getElementById('host-controls').style.display = amIHost ? 'block' : 'none';
+            
+            if(room.activeEvent) {
+                document.getElementById('event-banner').style.display = 'block';
+                document.getElementById('event-banner').innerText = `EVENTO ACTIVO: ${room.activeEvent.nombre} - ${room.activeEvent.txt}`;
+            }
+
+            // Gestion de pantallas
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            if(room.isPaused) {
+                document.getElementById('screen-paused').classList.add('active');
+                renderDuelos();
+                return;
+            }
+
+            if(room.state === 'lobby') {
+                document.getElementById('screen-lobby').classList.add('active');
+                const list = document.getElementById('lobby-players'); list.innerHTML = '';
+                room.players.forEach(p => list.innerHTML += `<li>🍺 ${p.name} ${p.name===room.host?'👑':''}</li>`);
+                if(amIHost) { document.getElementById('btn-start').style.display = 'block'; document.getElementById('wait-msg').style.display = 'none'; }
+            } 
+            else if (room.state === 'phase1') {
+                document.getElementById('screen-adivinacion').classList.add('active');
+                renderPhase1();
+            }
+            else if (room.state === 'pyramid') {
+                document.getElementById('screen-piramide').classList.add('active');
+                renderPyramid(); renderAllHands();
+            }
+        });
+
+        function renderCardHTML(card, isFlipped, extraClass="", onclick="") {
+            const inner = isFlipped ? "card-container flipped" : "card-container";
+            return `<div class="${inner} ${extraClass}" ${onclick ? `onclick="${onclick}"` : ''}>
+                    <div class="card-inner">
+                        <div class="card-back">?</div>
+                        <div class="card-front"><div class="suit">${SIMBOLOS[card.palo]}</div><div class="val">${NOMBRES[card.valor]}</div></div>
+                    </div></div>`;
+        }
+
+        function renderPhase1() {
+            let p = gameState.players[gameState.turnIdx];
+            document.getElementById('adiv-player-title').innerText = `Turno de ${p.name}`;
+            let cont = document.getElementById('adiv-cards-container'); cont.innerHTML = '';
+            p.hand.forEach(c => { cont.innerHTML += renderCardHTML(c, c.revealed); });
+            
+            let actions = document.getElementById('adiv-actions'); actions.innerHTML = '';
+            let inst = document.getElementById('adiv-instruction');
+            let nextBtn = document.getElementById('btn-next-phase');
+
+            // El boton Siguiente Turno solo para el host tras resolver
+            let targetCard = p.hand[gameState.phase - 1];
+            nextBtn.style.display = (amIHost && targetCard && targetCard.revealed) ? 'block' : 'none';
+
+            if (p.name !== myName) { inst.innerText = targetCard.revealed ? "Resuelto." : "Eligiendo..."; return; }
+            if (targetCard.revealed) { inst.innerText = "Resuelto."; return; }
+
+            if(gameState.phase === 1) {
+                inst.innerText = `Adivina el PALO`;
+                PALOS.forEach(palo => { actions.innerHTML += `<button onclick="guess(1, '${palo}')">${SIMBOLOS[palo]} ${palo}</button>`; });
+            } else if (gameState.phase === 2) {
+                inst.innerText = `¿Mayor, menor o igual que ${NOMBRES[p.hand[0].valor]}?`;
+                ['Mayor', 'Menor', 'Igual'].forEach(op => { actions.innerHTML += `<button onclick="guess(2, '${op}')">${op}</button>`; });
+            } else if (gameState.phase === 3) {
+                inst.innerText = `¿Dentro o Fuera?`;
+                ['Dentro', 'Fuera', 'Igual'].forEach(op => { actions.innerHTML += `<button onclick="guess(3, '${op}')">${op}</button>`; });
+            } else if (gameState.phase === 4) {
+                inst.innerText = `Apuesta número exacto`;
+                actions.innerHTML = `<input type="number" id="apuesta-num" min="1" max="10" placeholder="Num"><button onclick="guess(4)">Apostar</button>`;
+            }
+        }
+
+        function guess(phase, choice) {
+            let betValue = phase === 4 ? document.getElementById('apuesta-num').value : null;
+            socket.emit('guessCard', { roomId: currentRoomId, choice, betValue });
+        }
+
+        socket.on('showSendDrinks', ({ tragos }) => {
+            let options = gameState.players.filter(x => x.name !== myName).map(x => `<button class="btn-blue" style="display:block;width:100%" onclick="sendDrinks('${x.name}', ${tragos})">A ${x.name}</button>`).join('');
+            showModal("¡Acierto!", `<p>Reparte <strong>${tragos} tragos</strong>.</p>`, options);
+        });
+        function sendDrinks(targetName, tragos) { closeModal(); socket.emit('sendDrinksPhase1', { roomId: currentRoomId, targetName, tragos }); }
+
+        socket.on('showDrinkPenalty', ({ tragos, card }) => {
+            let html = `<button onclick="beberNormal(${tragos})">Beber ${tragos} tragos</button>
+                        <button class="btn-red" onclick="abrirRuleta(${tragos})">🎰 Let It Ride (Ruleta)</button>`;
+            showModal("¡Has fallado!", `<p>Era <strong>${NOMBRES[card.valor]} de ${card.palo}</strong>.</p>`, html);
+        });
+        
+        function beberNormal(tragos) { closeModal(); playGlup(); socket.emit('addTragos', {roomId: currentRoomId, playerName: myName, tragos}); }
+        
+        function abrirRuleta(tragosOriginales) {
+            closeModal();
+            let html = `
+                <button class="btn-red" onclick="tirarRuleta('Rojo', ${tragosOriginales})">Rojo (Se libra)</button>
+                <button class="btn-dark" onclick="tirarRuleta('Negro', ${tragosOriginales})">Negro (Se libra)</button>
+                <button class="btn-green" onclick="tirarRuleta('Verde', ${tragosOriginales})">Verde (Manda x3)</button>`;
+            showModal("Elige Color", "<p>Rojo/Negro (47.5%): Te salvas o bebes doble. Verde (5%): Mandas x3.</p>", html);
+        }
+        function tirarRuleta(color, tragosOriginales) {
+            closeModal(); socket.emit('letItRide', {roomId: currentRoomId, playerName: myName, colorElegido: color, tragosOriginales});
+        }
+
+        socket.on('spinRoulette', ({playerName}) => {
+            document.getElementById('roulette-text').innerText = `¡${playerName} tiró la ruleta!`;
+            document.getElementById('roulette-actions').innerHTML = '';
+            document.getElementById('roulette-wheel').classList.add('spin-anim');
+            document.getElementById('roulette-modal').classList.add('active');
+        });
+        socket.on('ruletaFin', () => { 
+            setTimeout(()=> { document.getElementById('roulette-modal').classList.remove('active'); document.getElementById('roulette-wheel').classList.remove('spin-anim'); }, 2000);
+        });
+
+        socket.on('receiveDrinks', ({ senderName, tragos }) => {
+            playGlup(); showModal("¡Pringas!", `<p><strong>${senderName}</strong> te ha mandado <strong>${tragos} tragos</strong>.</p>`, `<button onclick="closeModal()">¡Glup glup!</button>`);
+        });
+
+        function renderPyramid() {
+            const pb = document.getElementById('pyramid-board'); pb.innerHTML = '';
+            for(let r=0; r<gameState.pyramidRows; r++) {
+                let rowDiv = document.createElement('div'); rowDiv.className = 'pyramid-row';
+                gameState.pyramid[r].forEach(c => { rowDiv.innerHTML += renderCardHTML(c, c.revealed); });
+                pb.appendChild(rowDiv);
+            }
+            document.getElementById('btn-next-pyramid').style.display = amIHost ? 'inline-block' : 'none';
+            document.getElementById('btn-next-pyramid').disabled = (gameState.pendingSends > 0);
+        }
+
+        function renderAllHands() {
+            const hc = document.getElementById('all-hands-container'); hc.innerHTML = '';
+            gameState.players.forEach((p) => {
+                let pDiv = document.createElement('div'); pDiv.className = 'player-hand'; 
+                pDiv.innerHTML = `<strong>${p.name}</strong><br><span class="stats-badge">🍺 ${p.totalTragos} | 🏅 ${p.hidalgos}</span>`;
+                if(p.hand.length === 0) { 
+                    if(p.name === myName) pDiv.innerHTML += `<br><button class="btn-green" onclick="socket.emit('reglaHidalgo', {roomId: currentRoomId, playerName: myName})">¡Hidalgo!</button>`; 
+                } else {
+                    let cardsDiv = document.createElement('div'); cardsDiv.className = 'hand-cards';
+                    p.hand.forEach((c) => {
+                        let extra = c.isHighlighted ? 'highlight' : '';
+                        let oncl = (c.isHighlighted && p.name === myName) ? `clickMyCard('${c.id}', ${c.tragosAsignados})` : '';
+                        cardsDiv.innerHTML += renderCardHTML(c, p.name === myName || c.revealed, extra, oncl);
+                    });
+                    pDiv.appendChild(cardsDiv);
+                }
+                hc.appendChild(pDiv);
+            });
+        }
+        function clickMyCard(cardId, tragos) {
+            let options = gameState.players.filter(x => x.name !== myName).map(x => `<button class="btn-blue" style="display:block;width:100%;margin-bottom:5px;" onclick="sendCardPyr('${x.name}', '${cardId}', ${tragos})">A ${x.name}</button>`).join('');
+            showModal("¡Manda tu carta!", `<p>Pásale esta maldición y <strong>${tragos} tragos</strong> a alguien.</p>`, options);
+        }
+        function sendCardPyr(targetName, cardId, tragos) { closeModal(); socket.emit('sendCardPyramid', { roomId: currentRoomId, fromName: myName, targetName, cardId, tragos }); }
+
+        // Voto Popular
+        function openVotoPopular() {
+            let options = gameState.players.map(x => `<button onclick="iniciarJuicio('${x.name}')" style="display:block;width:100%">${x.name}</button>`).join('');
+            showModal("Juicio Cefa", "<p>¿A quién sentamos en el banquillo?</p>", options);
+        }
+        function iniciarJuicio(target) { closeModal(); socket.emit('iniciarJuicio', {roomId: currentRoomId, targetName: target}); }
+        socket.on('startVoteUI', ({targetName}) => {
+            playAlarm();
+            let html = `<button class="btn-red" onclick="votar('culpable')">Culpable 🍺</button> <button class="btn-blue" onclick="votar('inocente')">Inocente 😇</button>`;
+            showModal(`Juicio a ${targetName}`, "¿Ha incumplido las reglas de Cefa?", html);
+        });
+        function votar(v) { document.getElementById('modal-actions').innerHTML="<p>Esperando resto...</p>"; socket.emit('castVote', {roomId: currentRoomId, playerName: myName, voto: v}); }
+        socket.on('closeVoteUI', closeModal);
+
+        // Duelos
+        function renderDuelos() {
+            let list = document.getElementById('duel-list'); list.innerHTML = '';
+            gameState.players.filter(x=>x.name!==myName).forEach(x => {
+                list.innerHTML += `<button onclick="retarDuel('${x.name}')" style="display:block;width:100%">Retar a ${x.name}</button>`;
+            });
+        }
+        function retarDuel(targetName) { socket.emit('challengeDuel', {roomId: currentRoomId, fromName: myName, targetName}); }
+        
+        socket.on('showDuelUI', ({duelId, opponent}) => {
+            let html = `
+                <button class="btn-dark" onclick="enviarDuelo('${duelId}','Piedra')">🗿 Piedra</button>
+                <button class="btn-dark" onclick="enviarDuelo('${duelId}','Papel')">📄 Papel</button>
+                <button class="btn-dark" onclick="enviarDuelo('${duelId}','Tijera')">✂️ Tijera</button>`;
+            showModal(`Duelo vs ${opponent}`, "¡Piedra, papel, tijera! El que pierda bebe 3.", html);
+        });
+        function enviarDuelo(duelId, choice) { document.getElementById('modal-actions').innerHTML="<p>Esperando rival...</p>"; socket.emit('duelChoice', {roomId: currentRoomId, playerName: myName, duelId, choice}); }
+        socket.on('closeDuelUI', closeModal);
+    </script>
+</body>
+</html>
